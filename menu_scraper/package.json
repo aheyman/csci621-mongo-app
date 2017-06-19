@@ -1,0 +1,25 @@
+{
+  "name": "menu",
+  "version": "1.0.0",
+  "description": "",
+  "main": "menu_scraper.js",
+  "dependencies": {
+    "cheerio": "^0.22.0",
+    "commander": "^2.9.0",
+    "lodash": "^4.16.1",
+    "q": "^1.4.1",
+    "rx": "^4.1.0",
+    "unirest": "^0.5.1"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aheyman/csci621-mongo-app.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "homepage": "https://github.com/aheyman/csci621-mongo-app"
+}
