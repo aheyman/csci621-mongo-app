@@ -8,6 +8,9 @@ let unirest = require('unirest');
 let $ = require('cheerio');
 let Q = require('q');
 
+let Nightmare = require('nightmare');		
+let nightmare = Nightmare({ show: false });
+
 let cityStrs = [
   "New York", "Buffalo", "Rochester", "Yonkers", "Syracuse",
   "Albany", "New Rochelle", "Mount Vernon", "Schenectady",
@@ -22,6 +25,8 @@ let cityStrs = [
   "Rensselaer", "Port Jervis", "Johnstown", "Hornell", "Norwich",
   "Hudson", "Salamanca", "Mechanicville", "Little Falls", "Sherrill"
 ];
+
+let pair = (k, v) => [k, v];
 
 function get(path, params) {
   let zomatoKey = "477ccb434a0d5a82972d9b16cae6400e";
@@ -52,7 +57,6 @@ function promiseFromSource(source, unq) {
   return df.promise;
 }
 
-
 let citySource = Rx.Observable.create(observer => {
   let total = _.size(cityStrs);
   let respCount = 0;
@@ -63,7 +67,11 @@ let citySource = Rx.Observable.create(observer => {
     let cityP = get("/cities", {q : cstr});
     cityP.then(body => {
       respCount = respCount + 1; 
-      _.map(body.location_suggestions, city => observer.onNext(city))
+      _.map(body.location_suggestions, city => { 
+        if (city.state_name == "New York State") {
+          observer.onNext(city);
+        }
+      });
       maybeCompl();
     });
     cityP.fail(err => {
@@ -73,25 +81,114 @@ let citySource = Rx.Observable.create(observer => {
 });
 
 
-let shopSource = citySource.concatMap(city => {
-  let resultP = get("/search", {entity_id : city.id});
+let shopSource = (limit => {
 
-  let shopSource = Rx.Observable.create(observer => {
-    resultP.then(result => {
-      let shops = result.restaurants;
-      _.map(shops, shop => observer.onNext(shop));
-      observer.onCompleted();
+  let count = 0;
+  return citySource.concatMap(city => {
+
+    if (count < limit) {
+
+      let resultP = get("/search", {entity_id : city.id, entity_type: "city"});
+
+      let shopSource = Rx.Observable.create(observer => {
+        resultP.then(result => {
+          let shops = result.restaurants;
+          let loop = (shops => {
+            if (_.size(shops) == 0) {
+              observer.onCompleted();
+            } else {
+              let shop = _.head(shops);
+              let menuP = scrapeMenu(shop.restaurant.menu_url); 
+              menuP.then(menu => {
+                shop = _.assign(shop.restaurant, {menu: menu});
+                observer.onNext(shop);
+                loop(_.tail(shops));
+              });
+              menuP.fail(err => observer.onError(err));
+            }
+          });
+          loop(shops);
+        });
+        shopsP.fail(err => observer.onError(err));
+      });
+
+      count = count + 1;
+      return shopSource;
+    } else {
+      return Rx.Observable.empty();
+    }
+  });
+});
+
+let shopsP = promiseFromSource(shopSource(10), shop => shop);
+shopsP.then(shops => console.log(JSON.stringify(shops, null, 2)));
+shopsP.then(shops => console.log("count: " + _.size(shops)));
+
+
+let scrapeMenu = (menuUrl => {
+
+  let df = Q.defer();
+
+  nightmare.goto(
+    menuUrl
+  ).useragent(
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
+  ).evaluate(function () {
+    return document.documentElement.innerHTML;
+  }).end().then(function (html) {
+    let cheerio = require('cheerio');
+    let $ = cheerio.load(html);
+    let $menuContainer = $('#menu-container');
+    let subMenuTitles = [];
+    $menuContainer.find('.tabs__link').each(function (i, e) {
+      subMenuTitles.push($(this).text());
     });
-    shopsP.fail(err => observer.onError(err));
+
+    let subs = _.map(subMenuTitles, (title, i) => {
+      let divId = "text__menu--" + (i + 1);
+      let cats = []; 
+      $("#" + divId).find(".text-menu-cat").each(function(i, e) {
+        let cat_title = $(this).find(".category_name").text();
+        let cat_desc = $(this).find(".category_description").text();
+        let items = [];
+        $(this).find(".tmi").each(function(i, e) {
+          let itemName = _.trim($(this).find(".tmi-name").contents().filter(function() {
+            return this.nodeType === 3;
+          }).text());
+          let itemPrice = _.trim($(this).find(".tmi-price-txt").text());
+          let itemDesc = _.trim($(this).find(".tmi-desc-text").text());
+
+          let item = {price: itemPrice, desc: itemDesc};
+          items.push(pair(itemName, item));
+
+        });
+
+        let cat = {desc: cat_desc, items: _.fromPairs(items)};
+        cats.push(pair(cat_title, cat));
+        
+      });
+      let sub = _.fromPairs(cats);
+      return pair(title, sub);
+    });
+
+    let menu = _.fromPairs(subs);
+
+    df.resolve(menu);
+
+  }).catch(function (error) {
+    df.reject(error);
   });
 
-  return shopSource;
+  return df.promise;
 
 });
 
-let shopsP = promiseFromSource(shopSource, shop => shop);
-shopsP.then(shops => console.log(JSON.stringify(shops, null, 2)));
-shopsP.then(shops => console.log("count: " + _.size(shops)));
+
+//scrapeMenu(
+//  "https://www.zomato.com/rochester-ny/dinosaur-bar-b-que-rochester/menu"
+//).then(menu => {
+//  console.log("menu: " + JSON.stringify(menu, null, 2));
+//});
 
 
 
