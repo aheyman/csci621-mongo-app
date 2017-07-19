@@ -45,7 +45,7 @@ def retrieve_location():
     ]
 
     # Performing the aggregate on the collection, dumping the result into JSON
-    js = json.dumps(tweets.aggregate(location_query))
+    js = json.dumps(list(tweets.aggregate(location_query)))
     resp = Response(js, status=200, mimetype='application/json')
     return resp
 
