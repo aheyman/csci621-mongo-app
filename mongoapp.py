@@ -49,6 +49,20 @@ def retrieve_location():
     resp = Response(js, status=200, mimetype='application/json')
     return resp
 
+@app.route('/usercount', methods = ['GET'])
+def retrieve_location():
+
+    # This is Chris' query, just with quotes around the text params
+    location_query = [
+        {'$group':{'_id':'$user.screen_name','total': {'$sum': 1}}},
+        {'$sort':SON({'total':-1})}
+    ]
+
+    # Performing the aggregate on the collection, dumping the result into JSON
+    js = json.dumps(list(tweets.aggregate(location_query)))
+    resp = Response(js, status=200, mimetype='application/json')
+    return resp
+
 # Logging stolen from SO
 @app.after_request
 def after_request(response):
