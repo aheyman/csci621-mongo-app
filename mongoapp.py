@@ -41,7 +41,8 @@ def retrieve_location():
     # This is Chris' query, just with quotes around the text params
     location_query = [
         {'$group':{'_id':'$user.location','total': {'$sum': 1}}},
-        {'$sort':SON({'total':-1})}
+        {'$sort':SON({'total':-1})},
+        {'$limit': 500}
     ]
 
     # Performing the aggregate on the collection, dumping the result into JSON
@@ -55,7 +56,8 @@ def retrieve_usercount():
     # This is Chris' query, just with quotes around the text params
     location_query = [
         {'$group':{'_id':'$user.screen_name','total': {'$sum': 1}}},
-        {'$sort':SON({'total':-1})}
+        {'$sort':SON({'total':-1})},
+        {'$limit':500}
     ]
 
     # Performing the aggregate on the collection, dumping the result into JSON
