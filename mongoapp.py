@@ -50,7 +50,7 @@ def retrieve_location():
     return resp
 
 @app.route('/usercount', methods = ['GET'])
-def retrieve_location():
+def retrieve_usercount():
 
     # This is Chris' query, just with quotes around the text params
     location_query = [
@@ -63,7 +63,7 @@ def retrieve_location():
     resp = Response(js, status=200, mimetype='application/json')
     return resp
 
-# Logging stolen from SO
+# Logging from SO
 @app.after_request
 def after_request(response):
     timestamp = strftime('[%Y-%b-%d %H:%M]')
@@ -72,7 +72,7 @@ def after_request(response):
         request.scheme, request.full_path, response.status)
     return response
 
-# Logging stolen from SO
+# Logging from SO
 @app.errorhandler(Exception)
 def exceptions(e):
     tb = traceback.format_exc()
