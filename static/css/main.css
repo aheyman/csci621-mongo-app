@@ -1,0 +1,61 @@
+body {
+  border: 1px solid red;
+}
+
+.section {
+  display: inline-block;
+  vertical-align: top;
+  width: 350px;
+  border: 1px solid green;
+
+}
+
+.section_header {
+  display: block;
+  padding: 10px;
+  border: 1px solid black;
+}
+
+.section_list {
+  display: block;
+  padding: 2px;
+  border: 1px solid black;
+  height: 80%;
+  overflow-y: scroll;
+}
+
+.item {
+  display: block;
+  padding: 2px;
+}
+
+.item_left {
+  display: inline-block;
+  height: 30px;  
+  width: 50px;
+}
+
+.item_right {
+  display: inline-block;
+  height: 30px;  
+  width: 100%;
+  margin-right: -100px;
+}
+
+.item_data {
+  display: block;
+  padding: 5px;
+  height: 20px;
+  z-index: 10;
+}
+
+
+.item_bar {
+  position: relative;
+  display: block;
+  background-color: #ccc;
+  height: 30px;
+  top: -30px;
+  margin-bottom: -30px;
+  z-index: -10;
+}
