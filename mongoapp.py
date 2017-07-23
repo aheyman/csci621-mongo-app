@@ -85,9 +85,10 @@ def retrieve_source():
     return Response(source_helper(tweets), status=200, mimetype='application/json')
 
 
+# Performs the source query and parses out the device via the Regex above
 def source_helper(collection):
 
-    result_dic = {}
+    result_list = []
 
     # Get Top 25 tweet count by app used (source), descending by count
     source_query = [
@@ -102,15 +103,56 @@ def source_helper(collection):
     # Regex to look-behind anchor, grab everything, and then look ahead >
     for val in mongo_vals:
         device_html = val['_id']
-        count = val['total']
         device = pattern.search(device_html)
 
-        result_dic[device.group(0)] = count
+        result = {
+            '_id': device.group(0),
+            'total': val['total']
+        }
+        result_list.append(result)
 
     # Performing the aggregate on the collection, dumping the result into JSON
-    return json.dumps(result_dic)
+    return json.dumps(result_list)
 
 
+# Retrives the top 4 most retweets in the dataset
+@app.route('/mostretweets', methods=['GET'])
+def retrieve_most_retweets():
+    return Response(most_retweets_helper(tweets), status=200, mimetype='application/json')
+
+
+def most_retweets_helper(collection):
+    query = [
+        {'$match': {'retweeted_status.id_str': {'$exists': True, '$ne': None}}},
+        {'$sort': {'retweeted_status.retweet_count': -1}},
+        {'$project': {'_id': 0, 'retweeted_status.user.screen_name': 1, 'retweeted_status.text': 1,
+                      'retweeted_status.retweet_count': 1}},
+        {'$limit': 4}
+    ]
+
+    return json.dumps(list(collection.aggregate(query)))
+
+
+# Returns the top 25 most popular hashtags
+@app.route('/top25hashtags', methods=['GET'])
+def retrieve_25_hashtags():
+    return Response(hashtags_25_helper(tweets), status=200, mimetype='application/json')
+
+
+def hashtags_25_helper(collection):
+    query = [
+        {'$project': {'entities.hashtags': 1}},
+        {'$unwind': '$entities.hashtags'},
+        {'$project': {'entities.hashtags.text': {'$toLower': '$entities.hashtags.text'}}},
+        {'$group': {'_id': '$entities.hashtags.text', 'count': { '$sum': 1}}},
+        {'$sort': {'count': -1}},
+        {'$limit': 25}
+    ]
+
+    return json.dumps(list(collection.aggregate(query)))
+
+
+# High level summary of the data
 @app.route('/summary', methods = ['GET'])
 def retrieve_summary():
 
@@ -118,15 +160,20 @@ def retrieve_summary():
 
 
 def summary_helper(collection):
-    rt = retweet_count(collection)
-    rp = reply_count(collection)
 
-    result = {
-        'Tweet Count': tweet_count(collection),
-        'User Count': user_count(collection),
-        'num_replies': rp['num_replies'],
-        'num_retweets': rt['num_retweets']
-    }
+    result = [ ]
+
+    functions = [tweet_count, user_count]
+
+    for func in functions:
+        val = func(collection)
+        result.append({'total':val, '_id':func.__name__})
+
+    val = retweet_count(collection)
+    result.append({'_id':'num_retweets', 'total':val['num_retweets']})
+
+    val = reply_count(collection)
+    result.append({'_id': 'num_replies', 'total': val['num_replies']})
 
     return json.dumps(result)
 
@@ -151,7 +198,8 @@ def retweet_count(collection):
     try:
         return command_cursor.next()
     except StopIteration:
-        return {'num_retweets': 0}
+        return {'_id:': 'num_retweets',
+                'total': 0}
 
 
 # Total number of tweets that are replies
@@ -165,7 +213,8 @@ def reply_count(collection):
     try:
         return command_cursor.next()
     except StopIteration:
-        return {'num_replies': 0}
+        return {'_id:': 'num_replies',
+                'total': 0}
 
 
 # Accept the user entered search term and search the full dataset for the term.
@@ -196,7 +245,9 @@ def search_term_query(search_term):
             'location': location_helper(subset),
             'usercount': user_count_helper(subset),
             'source': source_helper(subset),
-            'summary': summary_helper(subset)
+            'summary': summary_helper(subset),
+            'mostretweets': most_retweets_helper(subset),
+            'top25hashtags': hashtags_25_helper(subset)
         }
 
         return Response(json.dumps(responses), status=200, mimetype='application/json')
