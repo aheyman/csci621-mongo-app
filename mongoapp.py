@@ -24,9 +24,11 @@ logger = logging.getLogger('tdm')
 logger.setLevel(logging.DEBUG)
 logger.addHandler(handler)
 
+
 @app.route('/')
 def hello():
     return render_template('index.html')
+
 
 @app.route('/data', methods = ['GET'])
 def update_data():
@@ -36,6 +38,7 @@ def update_data():
     js = json.dumps(data)
     resp = Response(js, status=200, mimetype='application/json')
     return resp
+
 
 @app.route('/location', methods = ['GET'])
 def retrieve_location():
@@ -57,10 +60,12 @@ def location_helper(collection):
     # Performing the aggregate on the collection, dumping the result into JSON
     return json.dumps(list(collection.aggregate(location_query)))
 
+
 @app.route('/usercount', methods = ['GET'])
 def retrieve_usercount():
 
     return Response(user_count_helper(tweets), status=200, mimetype='application/json')
+
 
 def user_count_helper(collection):
     # This is Chris' query, just with quotes around the text params
@@ -71,7 +76,7 @@ def user_count_helper(collection):
         {'$limit': 25}
     ]
     # Performing the aggregate on the collection, dumping the result into JSON
-    return json.dumps(list(tweets.aggregate(location_query)))
+    return json.dumps(list(collection.aggregate(location_query)))
 
 
 @app.route('/source', methods = ['GET'])
@@ -149,7 +154,6 @@ def retweet_count(collection):
         return {'num_retweets': 0}
 
 
-
 # Total number of tweets that are replies
 def reply_count(collection):
 
@@ -164,7 +168,6 @@ def reply_count(collection):
         return {'num_replies': 0}
 
 
-
 # Accept the user entered search term and search the full dataset for the term.
 # Results are stored to a separate collection to perform additional queries on
 # for UI display.
@@ -176,13 +179,16 @@ def search_term_query(search_term):
         return Response(status=411)
 
     if (valid_term(search_term)):
+
+        regx = re.compile(search_term, re.IGNORECASE)
+
         # Remove all documents currently in subset collection
         db['subset'].drop()
 
         # Write search term query results to subset collection to perform stats on
         # NOTE: regex start/termination char is '/', quotes mess it up in Mongo...FYI
         tweets.aggregate([
-            {'$match': {'text': search_term }},
+            {'$match': {'text': regx }},
             {'$out': 'subset'}
         ])
         
@@ -204,6 +210,7 @@ def valid_term(search_term):
     # TODO: Figure out how to validate user Mongo Queries
     return True
 
+
 # Logging from SO
 @app.after_request
 def after_request(response):
@@ -212,6 +219,7 @@ def after_request(response):
         timestamp, request.remote_addr,request.method,
         request.scheme, request.full_path, response.status)
     return response
+
 
 # Logging from SO
 @app.errorhandler(Exception)
@@ -222,6 +230,7 @@ def exceptions(e):
         timestamp, request.remote_addr, request.method,
         request.scheme, request.full_path, tb)
     return e.status_code
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0')
