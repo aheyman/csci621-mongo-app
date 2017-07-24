@@ -5,7 +5,7 @@ from pymongo import MongoClient
 from flask import Flask, current_app, render_template, Response, request
 import traceback
 import re
-from time import strftime
+from time import strftime, time
 
 app = Flask(__name__)
 
@@ -27,7 +27,10 @@ logger.addHandler(handler)
 
 @app.route('/')
 def hello():
-    return render_template('index.html')
+
+    ver = '?v' + str(time())
+
+    return render_template('index.html', ver=ver)
 
 
 @app.route('/data', methods = ['GET'])
