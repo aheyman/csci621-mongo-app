@@ -1,8 +1,10 @@
 import json
 import logging
 from logging.handlers import RotatingFileHandler
-from pymongo import MongoClient
+from pymongo import MongoClient, errors
 from flask import Flask, current_app, render_template, Response, request
+from bson import Binary, Code
+from bson.json_util import dumps
 import traceback
 import re
 from time import strftime, time
@@ -19,7 +21,7 @@ tweets = db['healthcare']
 subset = db['subset']
 
 # Setting up logging
-handler = RotatingFileHandler('app.log', maxBytes=100000, backupCount=3)
+handler = RotatingFileHandler('app.log', maxBytes=10000000, backupCount=3)
 logger = logging.getLogger('tdm')
 logger.setLevel(logging.DEBUG)
 logger.addHandler(handler)
@@ -33,20 +35,10 @@ def hello():
     return render_template('index.html', ver=ver)
 
 
-@app.route('/data', methods = ['GET'])
-def update_data():
-
-    data = ['Hello, World!']
-
-    js = json.dumps(data)
-    resp = Response(js, status=200, mimetype='application/json')
-    return resp
-
-
 @app.route('/location', methods = ['GET'])
 def retrieve_location():
 
-    resp = Response(location_helper(tweets), status=200, mimetype='application/json')
+    resp = Response(json.dumps(location_helper(tweets)), status=200, mimetype='application/json')
     return resp
 
 
@@ -61,13 +53,13 @@ def location_helper(collection):
     ]
 
     # Performing the aggregate on the collection, dumping the result into JSON
-    return json.dumps(list(collection.aggregate(location_query)))
+    return list(collection.aggregate(location_query))
 
 
 @app.route('/usercount', methods = ['GET'])
 def retrieve_usercount():
 
-    return Response(user_count_helper(tweets), status=200, mimetype='application/json')
+    return Response(json.dumps(user_count_helper(tweets)), status=200, mimetype='application/json')
 
 
 def user_count_helper(collection):
@@ -79,13 +71,13 @@ def user_count_helper(collection):
         {'$limit': 25}
     ]
     # Performing the aggregate on the collection, dumping the result into JSON
-    return json.dumps(list(collection.aggregate(location_query)))
+    return list(collection.aggregate(location_query))
 
 
 @app.route('/source', methods = ['GET'])
 def retrieve_source():
 
-    return Response(source_helper(tweets), status=200, mimetype='application/json')
+    return Response(json.dumps(source_helper(tweets)), status=200, mimetype='application/json')
 
 
 # Performs the source query and parses out the device via the Regex above
@@ -115,31 +107,31 @@ def source_helper(collection):
         result_list.append(result)
 
     # Performing the aggregate on the collection, dumping the result into JSON
-    return json.dumps(result_list)
+    return result_list
 
 
 # Retrives the top 4 most retweets in the dataset
 @app.route('/mostretweets', methods=['GET'])
 def retrieve_most_retweets():
-    return Response(most_retweets_helper(tweets), status=200, mimetype='application/json')
+    return Response(json.dumps(most_retweets_helper(tweets)), status=200, mimetype='application/json')
 
 
 def most_retweets_helper(collection):
     query = [
         {'$match': {'retweeted_status.id_str': {'$exists': True, '$ne': None}}},
         {'$sort': {'retweeted_status.retweet_count': -1}},
-        {'$project': {'_id': 0, 'retweeted_status.user.screen_name': 1, 'retweeted_status.text': 1,
-                      'retweeted_status.retweet_count': 1}},
+        {'$project': {'_id': 0, 'retweeted_status.id_str': 1, 'retweeted_status.user.screen_name': 1, 
+                      'retweeted_status.text': 1, 'retweeted_status.retweet_count': 1}},
         {'$limit': 4}
     ]
 
-    return json.dumps(list(collection.aggregate(query)))
+    return list(collection.aggregate(query))
 
 
 # Returns the top 25 most popular hashtags
 @app.route('/top25hashtags', methods=['GET'])
 def retrieve_25_hashtags():
-    return Response(hashtags_25_helper(tweets), status=200, mimetype='application/json')
+    return Response(json.dumps(hashtags_25_helper(tweets)), status=200, mimetype='application/json')
 
 
 def hashtags_25_helper(collection):
@@ -152,14 +144,24 @@ def hashtags_25_helper(collection):
         {'$limit': 25}
     ]
 
-    return json.dumps(list(collection.aggregate(query)))
+    return list(collection.aggregate(query))
+
+
+# Returns the top 25 most popular hashtags
+@app.route('/geodata', methods=['GET'])
+def geodata():
+    return Response(dumps(geodata_helper(tweets)), status=200, mimetype='application/json')
+
+
+def geodata_helper(collection):
+    return list(collection.find({'geo': {'$exists': True, '$ne': None}},{ 'geo': 1, 'coordinates': 1, 'place': 1}))
 
 
 # High level summary of the data
 @app.route('/summary', methods = ['GET'])
 def retrieve_summary():
 
-    return Response(summary_helper(tweets), status=200, mimetype='application/json')
+    return Response(json.dumps(summary_helper(tweets)), status=200, mimetype='application/json')
 
 
 def summary_helper(collection):
@@ -178,7 +180,7 @@ def summary_helper(collection):
     val = reply_count(collection)
     result.append({'_id': 'num_replies', 'total': val['num_replies']})
 
-    return json.dumps(result)
+    return result
 
 
 # count of total tweets
@@ -234,16 +236,16 @@ def search_term_query(search_term):
 
         regx = re.compile(search_term, re.IGNORECASE)
 
-        # Remove all documents currently in subset collection
-        db['subset'].drop()
+        count = tweets.find({'text': regx}).count()
 
-        # Write search term query results to subset collection to perform stats on
-        # NOTE: regex start/termination char is '/', quotes mess it up in Mongo...FYI
-        tweets.aggregate([
-            {'$match': {'text': regx }},
-            {'$out': 'subset'}
-        ])
-        
+        if (count < 5000):
+            # Write search term query results to subset collection to perform stats on
+            # NOTE: regex start/termination char is '/', quotes mess it up in Mongo...FYI
+            tweets.aggregate([
+                {'$match': {'text': regx}},
+                {'$out': 'subset'}
+            ])
+
         responses = {
             'location': location_helper(subset),
             'usercount': user_count_helper(subset),
@@ -253,7 +255,7 @@ def search_term_query(search_term):
             'top25hashtags': hashtags_25_helper(subset)
         }
 
-        return Response(json.dumps(responses), status=200, mimetype='application/json')
+        return Response(dumps(responses), status=200, mimetype='application/json')
 
     else:
         return Response(status=400)
