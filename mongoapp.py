@@ -178,15 +178,16 @@ def summary_helper(collection):
 
     val = retweet_count(collection)
     if not val:
-        result.append({'_id':'num_retweets', 'total':val['num_retweets']})
-    else:
         result.append({'_id': 'num_retweets', 'total': 0})
+    else:
+        result.append({'_id': 'num_retweets', 'total': val['num_retweets']})
+
 
     val = reply_count(collection)
     if not val:
-        result.append({'_id': 'num_replies', 'total': val['num_replies']})
-    else:
         result.append({'_id': 'num_replies', 'total': 0})
+    else:
+        result.append({'_id': 'num_replies', 'total': val['num_replies']})
 
     return result
 
