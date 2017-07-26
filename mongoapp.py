@@ -3,7 +3,6 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pymongo import MongoClient, errors
 from flask import Flask, current_app, render_template, Response, request
-from bson import Binary, Code
 from bson.json_util import dumps
 import traceback
 import re
@@ -120,7 +119,7 @@ def most_retweets_helper(collection):
     query = [
         {'$match': {'retweeted_status.id_str': {'$exists': True, '$ne': None}}},
         {'$sort': {'retweeted_status.retweet_count': -1}},
-        {'$project': {'_id': 0, 'retweeted_status.id_str': 1, 'retweeted_status.user.screen_name': 1, 
+        {'$project': {'_id': 0, 'retweeted_status.id_str': 1, 'retweeted_status.user.screen_name': 1,
                       'retweeted_status.text': 1, 'retweeted_status.retweet_count': 1}},
         {'$limit': 4}
     ]
@@ -147,14 +146,17 @@ def hashtags_25_helper(collection):
     return list(collection.aggregate(query))
 
 
-# Returns the top 25 most popular hashtags
+# Returns tweets with geo location enabled
 @app.route('/geodata', methods=['GET'])
 def geodata():
     return Response(dumps(geodata_helper(tweets)), status=200, mimetype='application/json')
 
 
 def geodata_helper(collection):
-    return list(collection.find({'geo': {'$exists': True, '$ne': None}},{ 'geo': 1, 'coordinates': 1, 'place': 1}))
+    geo_query = [{'$match': {'geo': {'$exists':True, '$ne': None}}},
+                 {'$group': {'_id': '$place.full_name', 'count': {'$sum': 1}}}]
+
+    return list(collection.aggregate(geo_query))
 
 
 # High level summary of the data
@@ -175,10 +177,16 @@ def summary_helper(collection):
         result.append({'total':val, '_id':func.__name__})
 
     val = retweet_count(collection)
-    result.append({'_id':'num_retweets', 'total':val['num_retweets']})
+    if not val:
+        result.append({'_id':'num_retweets', 'total':val['num_retweets']})
+    else:
+        result.append({'_id': 'num_retweets', 'total': 0})
 
     val = reply_count(collection)
-    result.append({'_id': 'num_replies', 'total': val['num_replies']})
+    if not val:
+        result.append({'_id': 'num_replies', 'total': val['num_replies']})
+    else:
+        result.append({'_id': 'num_replies', 'total': 0})
 
     return result
 
@@ -236,24 +244,22 @@ def search_term_query(search_term):
 
         regx = re.compile(search_term, re.IGNORECASE)
 
-        count = tweets.find({'text': regx}).count()
+        # Write search term query results to subset collection to perform stats on
+        # NOTE: regex start/termination char is '/', quotes mess it up in Mongo...FYI
+        tweets.aggregate([
+            {'$match': {'text': regx}},
+            {'$out': 'subset'}
+        ])
 
-        if (count < 5000):
-            # Write search term query results to subset collection to perform stats on
-            # NOTE: regex start/termination char is '/', quotes mess it up in Mongo...FYI
-            tweets.aggregate([
-                {'$match': {'text': regx}},
-                {'$out': 'subset'}
-            ])
-
-        responses = {
-            'location': location_helper(subset),
-            'usercount': user_count_helper(subset),
-            'source': source_helper(subset),
-            'summary': summary_helper(subset),
-            'mostretweets': most_retweets_helper(subset),
-            'top25hashtags': hashtags_25_helper(subset)
-        }
+        responses = [
+            {'location': location_helper(subset)},
+            {'usercount': user_count_helper(subset)},
+            {'source': source_helper(subset)},
+            {'summary': summary_helper(subset)},
+            {'mostretweets': most_retweets_helper(subset)},
+            {'top25hashtags': hashtags_25_helper(subset)},
+            {'geodata': geodata_helper(subset)}
+        ]
 
         return Response(dumps(responses), status=200, mimetype='application/json')
 
