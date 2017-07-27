@@ -252,15 +252,15 @@ def search_term_query(search_term):
             {'$out': 'subset'}
         ])
 
-        responses = [
-            {'location': location_helper(subset)},
-            {'usercount': user_count_helper(subset)},
-            {'source': source_helper(subset)},
-            {'summary': summary_helper(subset)},
-            {'mostretweets': most_retweets_helper(subset)},
-            {'top25hashtags': hashtags_25_helper(subset)},
-            {'geodata': geodata_helper(subset)}
-        ]
+        responses = {
+            'location': location_helper(subset),
+            'usercount': user_count_helper(subset),
+            'source': source_helper(subset),
+            'summary': summary_helper(subset),
+            'mostretweets': most_retweets_helper(subset),
+            'top25hashtags': hashtags_25_helper(subset),
+            'geodata': geodata_helper(subset)
+        }
 
         return Response(dumps(responses), status=200, mimetype='application/json')
 
@@ -297,3 +297,4 @@ def exceptions(e):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0')
+
