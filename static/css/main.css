@@ -3,9 +3,47 @@ body {
   font-size: 11pt;
 }
 
+.legend {
+  color: #555;
+}
+
+.legend div {
+  font-size: 11pt;
+  width: 85px;
+}
+.legend div i {
+  display: inline-block;
+  vertical-align: middle;
+  width: 18px;
+  height: 18px;
+  opacity: 0.7;
+  margin-right: 3px;
+}
+
+.legend div span {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+
 .cell {
   display: inline-block;
 }
+
+.info {
+    padding: 6px 8px;
+    font: 14px/16px Arial, Helvetica, sans-serif;
+    background: white;
+    background: rgba(255,255,255,0.8);
+    box-shadow: 0 0 15px rgba(0,0,0,0.2);
+    border-radius: 5px;
+}
+.info h4 {
+    margin: 0 0 5px;
+    color: #777;
+}
+
+
 
 input {
   width: 240px;
@@ -36,6 +74,10 @@ button {
   border: 1px solid #1eb300;
   cursor: pointer;
   outline: none;
+}
+
+button:active {
+  background-color: #21920a;
 }
 
 #map {
@@ -113,12 +155,25 @@ button {
   position: fixed;
   height: 100px;
   width: 100px;
-  top: 20%;
+  top: 30%;
   left: 50%;
   margin-top: -50px; 
   margin-left: -50px; 
   text-align: center;
+  z-index: 500;
+}
+
+#loading_logo {
+  display: block;
+  position: fixed;
+  height: 100%;
+  width: 125%;
+  top: 10%;
+  margin-left: -10%;
+  text-align: center;
   z-index: 100;
+  background-image: url("/static/images/loading_screen.svg");
+  background-repeat: no-repeat;
 }
 
 #summary_data {

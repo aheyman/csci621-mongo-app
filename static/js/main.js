@@ -49,7 +49,6 @@ var md = null;
   var $filter = function() {
     var $input = $('<input>', {type: 'text', placeholder: 'e.g. law'})
     var $fil = $('<div>', { id: 'filter' }).append(
-      //$('<div>', {class: 'header', text: 'Filter'}),
       $('<div>', {id: 'filter_content'}).append(
         $input,
         $('<button>', {text: "Filter"}).click(function() {
@@ -64,7 +63,9 @@ var md = null;
             mach.set('geo', resp.geodata);
 
             $("#loading").hide();
-          })
+          }).catch(function() {
+            $("#loading").hide();
+          });
         })
       )
     );
@@ -152,10 +153,11 @@ var md = null;
   var init = function() {
 
     var $main = $("<div>", {id: "main"}).hide();
+    var $loadingLogo = $("<div>", {id: "loading_logo"}).show();
     var $loading = $("<div>", {id: "loading"}).show().append(
       $("<i>", {class: "fa fa-spinner fa-spin fa-5x", 'aria-hidden':"false"})
     );
-    $("body").append($main, $loading);
+    $("body").append($main, $loading, $loadingLogo);
 
     $main.append(
       $('<div>', {class: 'cell'}).append(
@@ -164,10 +166,10 @@ var md = null;
       $map,
       $retweet,
       $('<div>', {id: 'section_container'}).append(
-        mkSection("location", "User Locations"),
-        mkSection("user", "Users"),
-        mkSection("source", "Sources"),
-        mkSection("hashtag", "Hashtags")
+        mkSection("location", "Tweets per Location"),
+        mkSection("user", "Tweets per User"),
+        mkSection("source", "Tweets per Source Type"),
+        mkSection("hashtag", "Tweets per Hashtag")
       )
     );
 
@@ -205,11 +207,6 @@ var md = null;
        },
       "geo": function(content) {
 
-
-       console.log("geo: " + JSON.stringify(content));
-
-
-
        //map UI
          if (md != null) {
            md.remove();
@@ -222,17 +219,6 @@ var md = null;
              maxZoom: 18,
              attribution: 'Map data &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors, ' + '<a href="http://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, ' + 'Imagery © <a href="http://mapbox.com">Mapbox</a>',
          }).addTo(md);
-         
-         var getColor = function(d) {
-           return d > 1000 ? '#800026' :
-                  d > 500  ? '#BD0026' :
-                  d > 200  ? '#E31A1C' :
-                  d > 100  ? '#FC4E2A' :
-                  d > 50   ? '#FD8D3C' :
-                  d > 20   ? '#FEB24C' :
-                  d > 10   ? '#FED976' :
-                             '#FFEDA0';
-         };
 
          var counts = _.reduce(content, function(acc, rec) {
 
@@ -248,17 +234,29 @@ var md = null;
            return _.assign({}, acc, newCountMap);
          }, stateCountMap); 
 
-         var max = _.max(_.values(_.map(counts, (cnt, st) => {
-           //var pop = statePopMap[st]; 
-           return cnt;
-         })));
-         var scale = 1500 / max; 
+         var max = _.max(_.values(counts));
+
+         var scale = (3 * max) / 400;
+         var grades = _.uniq(_.map([
+           0, 1, 2, 5, 10, 20, 50, 100
+         ], x => Math.floor(scale * x)));
+         
+         var getColor = function(d) {
+           return d >= grades[7] ? '#800026' :
+                  d >= grades[6] ? '#BD0026' :
+                  d >= grades[5] ? '#E31A1C' :
+                  d >= grades[4] ? '#FC4E2A' :
+                  d >= grades[3] ? '#FD8D3C' :
+                  d >= grades[2] ? '#FEB24C' :
+                  d >= grades[1] ? '#FED976' :
+                             '#FFEDA0';
+         };
 
          var style = function(feature) {
              //var pop = statePopMap[feature.properties.name];
              var count = counts[feature.properties.name];
              return {
-                 fillColor: getColor((count) * scale),
+                 fillColor: getColor(count),
                  weight: 2,
                  opacity: 1,
                  color: 'white',
@@ -267,8 +265,74 @@ var md = null;
              };
          }
          
-         L.geoJson(statesData).setStyle(style).addTo(md);
+         var geojson = L.geoJson(statesData, {
+           style: style,
+           onEachFeature: function(feature, layer) {
+             layer.on({
+               mouseover: function(e) {
+                 var layer = e.target;
+            
+                 layer.setStyle({
+                     weight: 5,
+                     color: '#666',
+                     dashArray: '',
+                     fillOpacity: 0.7
+                 });
+            
+                 if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+                     layer.bringToFront();
+                 }
+                 
+                 info.update(feature.properties);
+               },
+               mouseout: function(e) {
+                 geojson.resetStyle(e.target);
+                 info.update();
+               }
+             });
+           }
+         }).addTo(md);
 
+         var info = L.control();
+         
+         info.onAdd = function (map) {
+             this._div = L.DomUtil.create('div', 'info');
+             this.update();
+             return this._div;
+         };
+         
+         info.update = function (props) {
+           var count = counts[props ? props.name : ''];
+           var $div = $(this._div);
+           $div.html([
+             $("<h4>").text("Number of Tweets"),
+             $("<div>").append(
+               props ? $("<b>").text(props.name) : 'Hover over a state'
+             ),
+             $("<div>").text(count)
+           ]);
+         };
+         
+         info.addTo(md);
+
+
+
+         var legend = L.control({position: 'bottomright'});
+         
+         legend.onAdd = function (map) {
+           var div = L.DomUtil.create('div', 'info legend');
+           var $div = $(div).html(_.map(grades, function(grade, i) {
+             return $("<div>").append( 
+               $("<i>").css({background: getColor(grade)}),
+               $("<span>").text(grade + (grades[i + 1] ? '-' + (grades[i + 1] - 1) : '+'))
+             );
+           }));
+         
+           return div;
+         };
+           
+         
+         legend.addTo(md);
       }
     });
 
@@ -291,6 +355,7 @@ var md = null;
 
       $main.show();
       $loading.hide();
+      $loadingLogo.hide();
     });
 
 
